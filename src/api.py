@@ -1,6 +1,7 @@
 """FastAPI application for steel defect segmentation inference."""
 
 import io
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 import numpy as np
@@ -23,23 +24,6 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 # Class names (background + 6 defect types)
 CLASS_NAMES = ["background"] + NEU_CLASSES
 
-app = FastAPI(
-    title="Steel Surface Defect Detection API",
-    description=(
-        "U-Net based segmentation model for detecting surface defects "
-        "in steel using the NEU Surface Defect Dataset."
-    ),
-    version="1.0.0",
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Load model at startup
 model: UNet | None = None
 
@@ -59,11 +43,31 @@ def load_model() -> UNet:
     return net
 
 
-@app.on_event("startup")
-async def startup_event():
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     """Load model on application startup."""
     global model
     model = load_model()
+    yield
+
+
+app = FastAPI(
+    title="Steel Surface Defect Detection API",
+    description=(
+        "U-Net based segmentation model for detecting surface defects "
+        "in steel using the NEU Surface Defect Dataset."
+    ),
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def preprocess_image(image: Image.Image) -> torch.Tensor:
